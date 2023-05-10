@@ -1,0 +1,569 @@
+data <- read.table(file = "/home/katiej/methylcibersort_test/rstudio-export-2/OPT2_0.2_200_Signature.txt")
+
+# this is the signature file
+sig.yg.opt2.b.sig <- read.delim("/home/katiej/methylcibersort_test/rstudio-export-2/OPT2_0.2_200_Signature.txt", row.names = 1, header = TRUE)
+
+# this is the mixture file
+mix.pan.opt2.b.sig <- read.table("/home/katiej/methylcibersort_test/rstudio-export-2/pan_brain_mixture.opt2.b.sig.txt", row.names = 1, header = TRUE)
+
+# this is the phenotype data for each of the samples
+pan.pheno <- read.delim("/home/katiej/methylcibersort_test/pan_brain_phenoData_Coded_NAs_ordered.txt", row.names = 1, header = TRUE)
+
+### create a family column within pan.pheno
+library(dplyr)
+
+names(table(pan.pheno$Reference.Group.abbreviation))
+
+
+pan.pheno$tumour_family <- recode(pan.pheno$Reference.Group.abbreviation, 
+                                  "A_IDH"  = "Glioma-IDH","A_IDH_HG" = "Glioma-IDH", "O_IDH" = "Glioma-IDH",
+                                  "CONTR_ADENOPIT" = "Control",  "CONTR_CEBM" = "Control", "CONTR_HEMI" = "Control", "CONTR_HYPTHAL" = "Control", "CONTR_INFLAM" = "Control", 
+                                  "CONTR_PINEAL" = "Control", "CONTR_PONS" = "Control", "CONTR_REACT" = "Control", "CONTR_WM" = "Control", "LYMPHO" = "Control",
+                                  "PLEX_AD" = "Plexus", "PLEX_PED_A" = "Plexus", "PLEX_PED_B" = "Plexus",
+                                  "PIN_T_PB_A" = "Pineal", "PIN_T_PB_B" = "Pineal", "PIN_T_PPT" = "Pineal", "PTPR_A" = "Pineal", "PTPR_B" = "Pineal",
+                                  "SCHW" = "Nerve", "SCHW_MEL" = "Nerve",
+                                  "CHORDM" = "Mesenchymal", "EFT_CIC" = "Mesenchymal", "EWS" = "Mesenchymal", "HMB" = "Mesenchymal", "MNG" = "Mesenchymal", "SFT_HMPC" = "Mesenchymal",
+                                  "MELAN" = "Melanocytic", "MELCYT" = "Melanocytic",
+                                  "CN" = "Glio-neuronal", "DLGNT"= "Glio-neuronal", "ENB_A" = "Glio-neuronal", "ENB_B" = "Glio-neuronal", "LGG_DIG_DIA" = "Glio-neuronal", 
+                                  "LGG_DNT" = "Glio-neuronal", "LGG_GG" = "Glio-neuronal", "LGG_RGNT" = "Glio-neuronal", "LIPN" = "Glio-neuronal", 
+                                  "PGG_nC" = "Glio-neuronal", "RETB" = "Glio-neuronal",
+                                  "ANA_PA" = "Glioma-other",  "CHGL" = "Glioma-other", "HGNET_MN1" = "Glioma-other", "IHG" = "Glioma-other", "LGG_MYB" = "Glioma-other",
+                                  "LGG_PA_GG_ST" = "Glioma-other", "LGG_PA_MID" = "Glioma-other", "LGG_PA_PF" = "Glioma-other", "LGG_SEGA" = "Glioma-other", "PXA" = "Glioma-other",
+                                  "DMG_K27" = "Glioblastoma", "GBM_G34" = "Glioblastoma", "GBM_MES" = "Glioblastoma", "GBM_MID"= "Glioblastoma", "GBM_MYCN"= "Glioblastoma",
+                                  "GBM_RTK_I" = "Glioblastoma", "GBM_RTK_II" = "Glioblastoma", "GBM_RTK_III" = "Glioblastoma",
+                                  "EPN_MPE" = "Ependymal", "EPN_PF_A" = "Ependymal", "EPN_PF_B" = "Ependymal", "EPN_RELA" = "Ependymal", "EPN_SPINE" = "Ependymal", 
+                                  "EPN_YAP" = "Ependymal", "SUBEPN_PF" = "Ependymal", "SUBEPN_SPINE" = "Ependymal", "SUBEPN_ST" = "Ependymal",
+                                  "CPH_ADM" = "Sella", "CPH_PAP" = "Sella", "PITAD_ACTH" = "Sella", "PITAD_FSH_LH" = "Sella", "PITAD_PRL" = "Sella", 
+                                  "PITAD_STH_DNS_A" = "Sella", "PITAD_STH_DNS_B" = "Sella", "PITAD_STH_SPA" = "Sella", "PITAD_TSH" = "Sella", "PITUI" = "Sella",
+                                  "ATRT_MYC" = "Embryonal", "ATRT_SHH" = "Embryonal", "ATRT_TYR" = "Embryonal", "CNS_NB_FOXR2" = "Embryonal", "ETMR" = "Embryonal", 
+                                  "HGNET_BCOR" = "Embryonal", "MB_G3" = "Embryonal", "MB_G4" = "Embryonal", "MB_SHH_CHL_AD" = "Embryonal", 
+                                  "MB_SHH_INF" = "Embryonal", "MB_WNT" = "Embryonal")
+
+
+pan.pheno$tumour_family_order <- recode(pan.pheno$tumour_family, 
+                                        "Sella" = 1, 
+                                        "Plexus" = 2,
+                                        "Pineal" = 3,
+                                        "Nerve" = 4,
+                                        "Mesenchymal" = 5,
+                                        "Melanocytic" = 6,
+                                        "Glio-neuronal" = 7,
+                                        "Glioma-other" = 8,
+                                        "Glioma-IDH" = 9,
+                                        "Glioblastoma" = 10,
+                                        "Ependymal" = 11,
+                                        "Embryonal" = 12,
+                                        "Control" = 13)
+
+
+
+
+########### only run this once unless you update something
+# a <- Sys.time()
+# source("./CIBERSORT.R") 
+# results <- CIBERSORT(sig_matrix = "/home/katiej/methylcibersort_test/rstudio-export-2/OPT2_0.2_200_Signature.txt",
+#                       mixture_file = "/home/katiej/methylcibersort_test/rstudio-export-2/pan_brain_mixture.opt2.b.sig.txt",
+#                       perm = 1000,
+#                       QN = FALSE,
+#                       absolute = FALSE,
+#                       abs_method = 'sig.score')
+#  b <- Sys.time()
+#  b-a
+#  saveRDS(results, "./results.rds")
+#################
+
+results <- readRDS("./results.rds")
+
+## check that results and pan.pheno are identical and in the same order
+head(results)
+dim(results)
+head(pan.pheno)
+dim(pan.pheno)
+
+identical(rownames(pan.pheno),rownames(results))
+
+pan.pheno$onc_senes <- results[,"Oncogene_Induced_Senescent"]
+
+pan.pheno$near_senes <- results[,"Near_Senescent_BJ_fibroblast_cells"]
+
+pan.pheno$senes <- results[,"Senescent_BJ_fibroblast_cells"]
+
+######### no specific need to write out?
+# PanPhenoResults$Oncogene_Induced_Senescent
+# PanPhenoResults$Tumour_Type
+# 
+# library(writexl)
+# write_xlsx(pan.pheno, "/home/katiej/methylcibersort_test/panpheno.xlsx")
+# write.csv(results, "/home/katiej/methylcibersort_test/results.csv")
+##################
+
+### assuming that the table rows are aligned and identical we cna check specifically below
+identical(row.names(pan.pheno), row.names(results))
+
+# combined.df <- data.frame(Tumour_Type = pan.pheno$Tumour_Type, results)
+
+combined.df <- data.frame(Tumour_Type = pan.pheno$Tumour_Type,
+                          family = pan.pheno$tumour_family,
+                          family_order = pan.pheno$tumour_family_order,
+                          age = pan.pheno$Age..years.at.operation.,
+                          grade = pan.pheno$WHO.Grade,
+                          sex = pan.pheno$Sex,
+                          results)
+
+#### specifically set the levels
+combined.df$Tumour_Type <- factor(combined.df$Tumour_Type)
+levels(combined.df$Tumour_Type)
+
+# reorder is close to order, but is made to change the order of the factor levels.
+combined.df %>%
+  arrange(family_order) %>%    # First sort by val. This sort the dataframe but NOT the factor levels
+  mutate(Tumour_Type=factor(Tumour_Type, levels=unique(Tumour_Type))) -> combined.df
+
+# combined.df$Tumour_Type <- factor(combined.df$Tumour_Type, 
+#                                   levels = c("SUBEPN", "AIDH","ANAPA",
+#                                              "ATRT","CHGL","CHORDM", "CN",
+#                                              "CNSNB",  "CONTR",  "CPH",   
+# "DLGNT",  "DMG",    "EFT",    "ENB",    "EPN",    "ETMR",   "EWS",    "GBM",    "HGNET", 
+# "HMB",    "IHG",    "LGG",    "LIPN",   "LYMPHO", "MB",     "MELAN",  "MELCYT", "MNG",   
+# "OIDH",   "PGG",    "PINT",   "PITAD",  "PITUI",  "PLASMA", "PLEX",   "PTPR",   "PXA",   
+# "RETB",   "SCHW",   "SFTHMPC"))
+
+### remember scale_colour_manual to change the colours to the appropriate hexcode if you want 
+
+
+library(dplyr)
+library(ggplot2)
+
+# It's recommended to use a named vector
+cols <- c(
+  "A_IDH"  = "Red",
+  "A_IDH_HG" = "Blue", 
+  "O_IDH" = "Glioma-IDH",
+  "CONTR_ADENOPIT" = "Control",  "CONTR_CEBM" = "Control", "CONTR_HEMI" = "Control", "CONTR_HYPTHAL" = "Control", "CONTR_INFLAM" = "Control", 
+  "CONTR_PINEAL" = "Control", "CONTR_PONS" = "Control", "CONTR_REACT" = "Control", "CONTR_WM" = "Control", "LYMPHO" = "Control",
+  "PLEX_AD" = "Plexus", "PLEX_PED_A" = "Plexus", "PLEX_PED_B" = "Plexus",
+  "PIN_T_PB_A" = "Pineal", "PIN_T_PB_B" = "Pineal", "PIN_T_PPT" = "Pineal", "PTPR_A" = "Pineal", "PTPR_B" = "Pineal",
+  "SCHW" = "Nerve", "SCHW_MEL" = "Nerve",
+  "CHORDM" = "Mesenchymal", "EFT_CIC" = "Mesenchymal", "EWS" = "Mesenchymal", "HMB" = "Mesenchymal", "MNG" = "Mesenchymal", "SFT_HMPC" = "Mesenchymal",
+  "MELAN" = "Melanocytic", "MELCYT" = "Melanocytic",
+  "CN" = "Glio-neuronal", "DLGNT"= "Glio-neuronal", "ENB_A" = "Glio-neuronal", "ENB_B" = "Glio-neuronal", "LGG_DIG_DIA" = "Glio-neuronal", 
+  "LGG_DNT" = "Glio-neuronal", "LGG_GG" = "Glio-neuronal", "LGG_RGNT" = "Glio-neuronal", "LIPN" = "Glio-neuronal", 
+  "PGG_nC" = "Glio-neuronal", "RETB" = "Glio-neuronal",
+  "ANA_PA" = "Glioma-other",  "CHGL" = "Glioma-other", "HGNET_MN1" = "Glioma-other", "IHG" = "Glioma-other", "LGG_MYB" = "Glioma-other",
+  "LGG_PA_GG_ST" = "Glioma-other", "LGG_PA_MID" = "Glioma-other", "LGG_PA_PF" = "Glioma-other", "LGG_SEGA" = "Glioma-other", "PXA" = "Glioma-other",
+  "DMG_K27" = "Glioblastoma", "GBM_G34" = "Glioblastoma", "GBM_MES" = "Glioblastoma", "GBM_MID"= "Glioblastoma", "GBM_MYCN"= "Glioblastoma",
+  "GBM_RTK_I" = "Glioblastoma", "GBM_RTK_II" = "Glioblastoma", "GBM_RTK_III" = "Glioblastoma",
+  "EPN_MPE" = "Ependymal", "EPN_PF_A" = "Ependymal", "EPN_PF_B" = "Ependymal", "EPN_RELA" = "Ependymal", "EPN_SPINE" = "Ependymal", 
+  "EPN_YAP" = "Ependymal", "SUBEPN_PF" = "Ependymal", "SUBEPN_SPINE" = "Ependymal", "SUBEPN_ST" = "Ependymal",
+  "CPH_ADM" = "Sella", "CPH_PAP" = "Sella", "PITAD_ACTH" = "Sella", "PITAD_FSH_LH" = "Sella", "PITAD_PRL" = "Sella", 
+  "PITAD_STH_DNS_A" = "Sella", "PITAD_STH_DNS_B" = "Sella", "PITAD_STH_SPA" = "Sella", "PITAD_TSH" = "Sella", "PITUI" = "Sella",
+  "ATRT_MYC" = "Embryonal", "ATRT_SHH" = "Embryonal", "ATRT_TYR" = "Embryonal", "CNS_NB_FOXR2" = "Embryonal", "ETMR" = "Embryonal", 
+  "HGNET_BCOR" = "Embryonal", "MB_G3" = "Embryonal", "MB_G4" = "Embryonal", "MB_SHH_CHL_AD" = "Embryonal", 
+  "MB_SHH_INF" = "Embryonal", "MB_WNT" = "Embryonal")
+
+p + scale_colour_manual(values = cols)
+
+cibersort_onc.plot <-ggplot(combined.df, aes(x=Tumour_Type, y=Oncogene_Induced_Senescent, fill=Tumour_Type)) +
+  geom_boxplot(outlier.color="black", outlier.size=0.5, outlier.alpha = 0.75) +
+  theme(legend.position = "none") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  scale_fill_manual(values = cols)
+print(cibersort_onc.plot)
+ggsave(cibersort_onc.plot, file = "./cibersort_onc_plot.png", width =  20, height = 10, units = "cm")
+
+### color by family
+levels(factor(combined.df$family))
+family.cols <- c("Sella" = "#5DB4A2",
+                 "Plexus" = "#613B21",
+                 "Pineal" = "#C3DCA5",
+                 "Nerve" = "#E6CB9F",
+                 "Mesenchymal" = "#BA88B1",
+                 "Melanocytic" = "#183E59",
+                 "Glio-neuronal" = "#99542B",
+                 "Glioma-other" = "#615090",
+                 "Glioma-IDH" = "#C7A533",
+                 "Glioblastoma" = "#8DC582",
+                 "Ependymal" = "#D14056",
+                 "Embryonal" = "#4F97C6",
+                 "Control" = "#BBBBB7")
+
+## Boxplots overall
+
+cibersort_onc.plot <-ggplot(combined.df, aes(x=Tumour_Type, y=Oncogene_Induced_Senescent, fill=family)) +
+  geom_boxplot(outlier.color="black", outlier.size=0.1, outlier.alpha = 0.75) +
+  theme(legend.position = "right", legend.key.size = unit(0.25, 'cm'), legend.key.height = unit(0.25, 'cm'), legend.key.width = unit(0.25, 'cm'), legend.text = element_text((size=0.25))) + 
+  labs(fill = "Tumour family") +
+  theme(axis.text.x = element_text(size = 5, angle = 90, vjust = 1, hjust=1)) +
+  scale_fill_manual(values = family.cols) +
+  ggtitle("Levels of Oncogene Induced Senescence in Different Cell and Tumour Types") +
+  theme(plot.title = element_text(size = 10, hjust = 0.5)) +
+  xlab("Tumour Type") + ylab ("Oncogene-Induced Senescence") +
+  theme(axis.title.x = element_text(size = 7)) +
+  theme(axis.title.y = element_text(size = 7))
+print(cibersort_onc.plot)
+ggsave(cibersort_onc.plot, file = "./cibersort_onc_plot.png", width =  20, height = 10, units = "cm")
+
+cibersort_fibro.plot <-ggplot(combined.df, aes(x=Tumour_Type, y=Senescent_BJ_fibroblast_cells, fill=family)) +
+  geom_boxplot(outlier.color="black", outlier.size=0.1, outlier.alpha = 0.75) +
+  theme(legend.position = "right", legend.key.size = unit(0.25, 'cm'), legend.key.height = unit(0.25, 'cm'), legend.key.width = unit(0.25, 'cm'), legend.text = element_text((size=0.25))) + 
+  labs(fill = "Tumour family") +
+  theme(axis.text.x = element_text(size = 5, angle = 90, vjust = 1, hjust=1)) +
+  scale_fill_manual(values = family.cols) +
+  ggtitle("Levels of Senescence in BJ Fibroblast Cells") +
+  theme(plot.title = element_text(size = 10, hjust = 0.5)) +
+  xlab("Tumour Type") + ylab ("Senescenct BJ Fibroblast cells") +
+  theme(axis.title.x = element_text(size = 7)) +
+  theme(axis.title.y = element_text(size = 7))
+print(cibersort_fibro.plot)
+ggsave(cibersort_fibro.plot, file = "./cibersort_ses_fibro_plot.png", width =  20, height = 10, units = "cm")
+
+cibersort_near.plot <-ggplot(combined.df, aes(x=Tumour_Type, y=Near_Senescent_BJ_fibroblast_cells, fill=family)) +
+  geom_boxplot(outlier.color="black", outlier.size=0.1, outlier.alpha = 0.75) +
+  theme(legend.position = "right", legend.key.size = unit(0.25, 'cm'), legend.key.height = unit(0.25, 'cm'), legend.key.width = unit(0.25, 'cm'), legend.text = element_text((size=0.25))) + 
+  labs(fill = "Tumour family") +
+  theme(axis.text.x = element_text(size = 5, angle = 90, vjust = 1, hjust=1)) +
+  scale_fill_manual(values = family.cols) +
+  ggtitle("Levels of Senescence in Nearly-Senescent BJ Fibroblast Cells") +
+  theme(plot.title = element_text(size = 10, hjust = 0.5)) +
+  xlab("Tumour Type") + ylab ("Nearly-Senescenct BJ Fibroblast cells") +
+  theme(axis.title.x = element_text(size = 7)) +
+  theme(axis.title.y = element_text(size = 7))
+print(cibersort_near.plot)
+ggsave(cibersort_near.plot, file = "./cibersort_near_plot.png", width =  20, height = 10, units = "cm")
+
+table(combined.df$grade)
+
+combined.df$grade <- recode(combined.df$grade,
+       "I" = "I",
+       "II" = "II",
+       "III" = "III",
+       "I, II or III"  = "NA",
+       "II or III" = "NA",
+       "not available" = "NA",
+       "IV" = "IV")
+
+combined.df$grade[combined.df$grade=="NA"] <- NA
+
+combined.df[!is.na(combined.df$grade),] -> combined.df.subset
+
+combined.df$age <- recode(combined.df$age, "not available" = "NA")
+combined.df$age <-  trimws(combined.df$age)
+combined.df$age[combined.df$age=="NA"] <- NA
+combined.df[!is.na(combined.df$age),] -> combined.df.age.subset
+
+combined.df[!is.na(combined.df$age),] -> combined.df.age.test
+
+combined.df.age.test[combined.df.age.test$age <= 15, "age_group"] <- "0-15"
+combined.df.age.test[combined.df.age.test$age > 15 & combined.df.age.test$age <= 31, "age_group"] <- "16-30"
+combined.df.age.test[combined.df.age.test$age > 30 & combined.df.age.test$age <= 45, "age_group"] <- "31-45"
+combined.df.age.test[combined.df.age.test$age > 45 & combined.df.age.test$age <= 60, "age_group"] <- "46-60"
+combined.df.age.test[combined.df.age.test$age > 60 & combined.df.age.test$age <= 75, "age_group"] <- "61-75"
+combined.df.age.test[combined.df.age.test$age > 75, "age_group"] <- "76-93"
+
+combined.df$Tumour_location <- recode(combined.df$Tumour_location, "not available" = "NA")
+combined.df$Tumour_location[combined.df$Tumour_location=="NA"] <- NA
+combined.df[!is.na(combined.df$Tumour_location),] -> combined.df.location.subset
+
+# boxplot to show senescence by grade
+
+onc_senes_grade <- ggplot(combined.df.subset, aes(x=grade, y=Oncogene_Induced_Senescent, fill=family)) +
+  geom_boxplot(outlier.color="black", outlier.size=0.1, outlier.alpha = 0.75) +
+  theme(legend.position = "right", legend.key.size = unit(0.25, 'cm'), legend.key.height = unit(0.25, 'cm'), legend.key.width = unit(0.25, 'cm'), legend.text = element_text((size=0.25))) + 
+  labs(fill = "Tumour family") +
+  theme(axis.text.x = element_text(size = 10, vjust = 1, hjust=1)) +
+  scale_fill_manual(values = family.cols) +
+  ggtitle("Levels of Oncogene Induced Senescence by WHO Tumour Grade") +
+  theme(plot.title = element_text(size = 10, hjust = 0.5)) +
+  xlab("WHO Grade") + ylab ("Oncogene-Induced Senescence") +
+  theme(axis.title.x = element_text(size = 10)) +
+  theme(axis.title.y = element_text(size = 10))
+print(onc_senes_grade)
+ggsave(onc_senes_grade, file = "./onc_senes_grade.png", width =  20, height = 10, units = "cm")
+
+near_senes_grade <- ggplot(combined.df.subset, aes(x=grade, y=Near_Senescent_BJ_fibroblast_cells, fill=family)) +
+  geom_boxplot(outlier.color="black", outlier.size=0.1, outlier.alpha = 0.75) +
+  theme(legend.position = "right", legend.key.size = unit(0.25, 'cm'), legend.key.height = unit(0.25, 'cm'), legend.key.width = unit(0.25, 'cm'), legend.text = element_text((size=0.25))) + 
+  labs(fill = "Tumour family") +
+  theme(axis.text.x = element_text(size = 10, vjust = 1, hjust=1)) +
+  scale_fill_manual(values = family.cols) +
+  ggtitle("Levels of Near-Senescent Cells  by WHO Tumour Grade") +
+  theme(plot.title = element_text(size = 10, hjust = 0.5)) +
+  xlab("WHO Grade") + ylab ("Near-Senescence") +
+  theme(axis.title.x = element_text(size = 10)) +
+  theme(axis.title.y = element_text(size = 10))
+print(near_senes_grade)
+ggsave(near_senes_grade, file = "./near_senes_grade.png", width =  20, height = 10, units = "cm")
+
+senes_grade <- ggplot(combined.df.subset, aes(x=grade, y=Senescent_BJ_fibroblast_cells, fill=family)) +
+  geom_boxplot(outlier.color="black", outlier.size=0.1, outlier.alpha = 0.75) +
+  theme(legend.position = "right", legend.key.size = unit(0.25, 'cm'), legend.key.height = unit(0.25, 'cm'), legend.key.width = unit(0.25, 'cm'), legend.text = element_text((size=0.25))) + 
+  labs(fill = "Tumour family") +
+  theme(axis.text.x = element_text(size = 10, vjust = 1, hjust=1)) +
+  scale_fill_manual(values = family.cols) +
+  ggtitle("Levels of Senescent Cells  by WHO Tumour Grade") +
+  theme(plot.title = element_text(size = 10, hjust = 0.5)) +
+  xlab("WHO Grade") + ylab ("Senescence") +
+  theme(axis.title.x = element_text(size = 10)) +
+  theme(axis.title.y = element_text(size = 10))
+print(senes_grade)
+ggsave(senes_grade, file = "./senes_grade.png", width =  20, height = 10, units = "cm")
+
+## Boxplots showing senescence by patient age
+
+onc_senes_age <- ggplot(combined.df.age.test, aes(x=age_group, y=Oncogene_Induced_Senescent, fill=family)) +
+  geom_boxplot(outlier.color="black", outlier.size=0.1, outlier.alpha = 0.75) +
+  theme(legend.position = "right", legend.key.size = unit(0.25, 'cm'), legend.key.height = unit(0.25, 'cm'), legend.key.width = unit(0.25, 'cm'), legend.text = element_text((size=0.25))) + 
+  labs(fill = "Tumour family") +
+  theme(axis.text.x = element_text(size = 10, vjust = 1, hjust=1)) +
+  scale_fill_manual(values = family.cols) +
+  ggtitle("Levels of Oncogene Induced Senescence by Patient Age at Operation") +
+  theme(plot.title = element_text(size = 10, hjust = 0.5)) +
+  xlab("Patient Age at Operation") + ylab ("Oncogene-Induced Senescence") +
+  theme(axis.title.x = element_text(size = 10)) +
+  theme(axis.title.y = element_text(size = 10))
+print(onc_senes_age)
+ggsave(onc_senes_age, file = "./onc_senes_age.png", width =  20, height = 10, units = "cm")
+
+near_senes_age <- ggplot(combined.df.age.test, aes(x=age_group, y=Near_Senescent_BJ_fibroblast_cells, fill=family)) +
+  geom_boxplot(outlier.color="black", outlier.size=0.1, outlier.alpha = 0.75) +
+  theme(legend.position = "right", legend.key.size = unit(0.25, 'cm'), legend.key.height = unit(0.25, 'cm'), legend.key.width = unit(0.25, 'cm'), legend.text = element_text((size=0.25))) + 
+  labs(fill = "Tumour family") +
+  theme(axis.text.x = element_text(size = 10, vjust = 1, hjust=1)) +
+  scale_fill_manual(values = family.cols) +
+  ggtitle("Levels of Near-Senescence by Patient Age at Operation") +
+  theme(plot.title = element_text(size = 10, hjust = 0.5)) +
+  xlab("Patient Age at Operation") + ylab ("Near-Senescent Fibroblast Cells") +
+  theme(axis.title.x = element_text(size = 10)) +
+  theme(axis.title.y = element_text(size = 10))
+print(near_senes_age)
+ggsave(near_senes_age, file = "./near_senes_age.png", width =  20, height = 10, units = "cm")
+
+senes_age <- ggplot(combined.df.age.test, aes(x=age_group, y=Senescent_BJ_fibroblast_cells, fill=family)) +
+  geom_boxplot(outlier.color="black", outlier.size=0.1, outlier.alpha = 0.75) +
+  theme(legend.position = "right", legend.key.size = unit(0.25, 'cm'), legend.key.height = unit(0.25, 'cm'), legend.key.width = unit(0.25, 'cm'), legend.text = element_text((size=0.25))) + 
+  labs(fill = "Tumour family") +
+  theme(axis.text.x = element_text(size = 10, vjust = 1, hjust=1)) +
+  scale_fill_manual(values = family.cols) +
+  ggtitle("Levels of Senescence by Patient Age at Operation") +
+  theme(plot.title = element_text(size = 10, hjust = 0.5)) +
+  xlab("Patient Age at Operation") + ylab ("Senescent Fibroblast Cells") +
+  theme(axis.title.x = element_text(size = 10)) +
+  theme(axis.title.y = element_text(size = 10)) +
+print(senes_age)
+ggsave(senes_age, file = "./senes_age.png", width =  20, height = 10, units = "cm")
+
+
+# Boxplots showing senescence by location (needs help!!!)
+
+onc_senes_location <- ggplot(combined.df.location.subset, aes(x=Tumour_location, y=Oncogene_Induced_Senescent, fill=family)) +
+  geom_boxplot(outlier.color="black", outlier.size=0.1, outlier.alpha = 0.75) +
+  theme(legend.position = "right", legend.key.size = unit(0.25, 'cm'), legend.key.height = unit(0.25, 'cm'), legend.key.width = unit(0.25, 'cm'), legend.text = element_text((size=0.25))) + 
+  labs(fill = "Tumour family") +
+  theme(axis.text.x = element_text(size = 10, vjust = 1, hjust=1, angle=45)) +
+  scale_fill_manual(values = family.cols) +
+  ggtitle("Levels of Oncogene Induced Senescence by Tumour Location") +
+  theme(plot.title = element_text(size = 10, hjust = 0.5)) +
+  xlab("Tumour Location") + ylab ("Oncogene-Induced Senescence") +
+  theme(axis.title.x = element_text(size = 10)) +
+  theme(axis.title.y = element_text(size = 10)) +
+print(onc_senes_location)
+ggsave(onc_senes_location, file = "./onc_senes_location.png", width =  20, height = 10, units = "cm")
+
+cor(pan.pheno$Tumour_Type, pan.pheno$Estimated.tumour.purity.according.to.TCGA...Ceccarelli.et.al..2016)
+
+gene.list <- lapply(gene.list, remove.nas)
+
+library(gridExtra)
+ggarrange(cibersort_onc.plot, cibersort_near.plot, cibersort_fibro.plot)
+
+
+## calculating mean of medians
+
+median(combined.df$Oncogene_Induced_Senescent)
+
+## ANOVA test
+
+one.way <- aov(Oncogene_Induced_Senescent ~ Tumour_Type, data = combined.df)
+summary(one.way)
+
+## end/ANOVA test
+
+##### script to generate a Venn diagram
+Sakaki <- paste(GeneListdoc$`Sakaki-miRNA expression`)
+SenMayo <- paste(GeneListdoc$SenMayo)
+Chatsirisupachai <- paste(GeneListdoc$`Chatsirisupachai et al - list of senescence genes (overexpressed)`)
+Avelar <- paste(GeneListdoc$`Avelar CellAge signatures`)
+CellAge <- paste (GeneListdoc$`CellAge gene list`)
+PengIMR90 <- paste (GeneListdoc$`Peng Xu et al: SASP factors induced in senescent IMR-90 cells`)
+PengCDKN1A <- paste (GeneListdoc$`Peng Xu: SASP factors with induction dependent on CDKN1A`)
+Casella <- paste(GeneListdoc$`Casella et al upregulated transcripts`)
+Purcell <- paste(GeneListdoc$`Purcell et al`)
+Coppe <- paste(GeneListdoc$`Coppé et al`)
+Basisty <- paste(GeneListdoc$`Basisty et al SASP Atlas`)
+#############
+
+gene.list <- list(
+  Sakaki, 
+  SenMayo, 
+  Chatsirisupachai, 
+  Avelar, 
+  CellAge, 
+  PengIMR90, 
+  PengCDKN1A, 
+  Casella, 
+  Purcell, 
+  Coppe, 
+  Basisty)
+
+remove.nas <- function(x){
+  if(length(which(x=="NA"))>0){
+  x[-which(x=="NA")] -> x
+  }
+  return(x)
+}
+
+gene.list <- lapply(gene.list, remove.nas)
+
+gene.list.names <- c("Sakaki" , 
+  "SenMayo" , 
+  "Chatsirisupachai" , 
+  "Avelar" , 
+  "CellAge" , 
+  "PengIMR90" , 
+  "PengCDKN1A" , 
+  "Casella", 
+  "Purcell" , 
+  "Coppe" , 
+  "Basisty")
+
+names(gene.list) <- gene.list.names
+
+library(VennDiagram)
+
+#VennDiagram::venn.diagram(x , GeneListdoc = "venn1.png")
+
+VennDiagram::venn.diagram(
+  x = gene.list[c("Chatsirisupachai","Avelar")],
+  category.names = c("Chatsirisupachai","Avelar"),
+  filename = 'venn1.png', 
+  imagetype = "png", 
+  disable.logging = T)
+
+VennDiagram::venn.diagram(
+  x = gene.list[c("SenMayo","Basisty")],
+  category.names = c("SenMayo","Basisty"),
+  filename = 'venn2.png', 
+  imagetype = "png", 
+  disable.logging = T)
+
+VennDiagram::venn.diagram(
+  x = gene.list[c("PengIMR90","PengCDKN1A")],
+  category.names = c("PengIMR90","PengCDKN1A"),
+  filename = 'venn3.png', 
+  imagetype = "png", 
+  disable.logging = T)
+
+###
+VennDiagram::calculate.overlap(gene.list[1:5]) -> out
+
+library("UpSetR")
+library("ComplexHeatmap")
+library("pheatmap")
+
+gene.freq <- list_to_matrix(gene.list)
+# change the order of the rows on the heatmap
+gene.freq <- gene.freq[order(rowSums(gene.freq), decreasing = T),]
+
+rowSums(gene.freq)
+
+pheatmap(gene.freq[,], cluster_rows = F)
+
+
+library(foreach)
+
+matrix.of.overlaps <- foreach(i = 1:length(gene.list), .combine = rbind)%do%{
+  foreach(z = 1:length(gene.list), .combine = c)%do%{
+  length(intersect(gene.list[[i]], gene.list[[z]]))
+  }
+}
+
+matrix.of.overlaps <- foreach(i = 1:length(gene.list), .combine = rbind)%do%{
+  matrix.of.overlaps[i,] -> temp
+  temp[i] <- NA
+  return(temp)
+}
+
+colnames(matrix.of.overlaps) <- names(gene.list)
+rownames(matrix.of.overlaps) <- names(gene.list)
+
+
+unlist(lapply(gene.list, length)) -> set.lengths
+normalised.matrix.of.overlaps <- apply(matrix.of.overlaps, 1, function(x){return(x/set.lengths)})
+
+### two objects created one with a litst of the number of shared genes
+matrix.of.overlaps
+### same object but normalised to the overall size of the geneset
+normalised.matrix.of.overlaps
+
+
+pheatmap(matrix.of.overlaps, cluster_rows = F, cluster_cols = F)
+pheatmap(matrix.of.overlaps, cluster_rows = F, cluster_cols = F, display_numbers = T)
+pheatmap(normalised.matrix.of.overlaps, cluster_rows = F, cluster_cols = F, display_numbers = T)
+
+####################
+
+
+
+temp.plot
+ggsave(temp.plot, file = "./temp.png", width =  20, height = 10, units = "cm")
+
+one.way <- aov(Oncogene_Induced_Senescent ~ Tumour_Type, data = PanPhenoResults)
+summary (one.way)
+
+library(pheatmap)
+pheatmap(output.test$SignatureMatrix)
+
+## Time difference of 10.40594 mins
+
+## the above is not a real world example however we provide here the full signature generated and used in our study and we typically run something like this...
+# results <-CIBERSORT(sig_matrix = "./OPT2_0.2_200_SigEdit.txt", ## the signature from our study
+#                    mixture_file = "a_mixture_file_from_CNS_tumours.txt", ## i.e. make your own beta matrix
+#                    perm = 1000,
+#                    QN = F,
+#                    absolute = F,
+#                    abs_method = 'sig.score')
+
+
+#### your home drive is always /home/katiej
+### this is sometimes represented as "~/"
+
+### ./ = working directory you can see what this is by typing getwd()
+
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("FlowSorted.Blood.450k")
+
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("IlluminaHumanMethylation450kmanifest")
+
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("minfiData")
+
+library(MethylCIBERSORT)
+
+source('/home/katiej/methylcibersort_test/feature_select_WORKING_2019.R')
+source('/home/katiej/methylcibersort_test/synth_mix_2019.R')
+
+require(FlowSorted.Blood.450k)
+require(IlluminaHumanMethylation450kmanifest)
+
+
+#### at the moment you are drawing the Tumour_Type which is the main tumour type without taking into account subgroups
+### the two pieces of information you need are found in the fields pan.pheno$Tumour_Type and pan.pheno$Tumour_Subgroup
+### For convenience another column has been added called pan.pheno$Reference.Group.abbreviation which combines the two.
+### It is probably this one that you should use for your boxplots and these categories should match nicely to the
+### tumour families outlined in Grabovska et al
