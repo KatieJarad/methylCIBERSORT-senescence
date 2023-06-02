@@ -1,0 +1,125 @@
+# if (!require("BiocManager", quietly = TRUE))
+#   install.packages("BiocManager")
+# 
+# BiocManager::install("GSVA")
+
+library(Biobase)
+library(data.table)
+library(readr)
+library(GSEABase)
+library(GSVAdata)
+library(GSVA)
+library(biomaRt) 
+
+## reading in the signatures file
+signatures <- read.csv("signatures.csv")
+signatures.list <- list(senMayo = signatures$SenMayo,
+     cellAge = signatures$CellAge.gene.list,
+     top20 = signatures$Top.20,
+     top80 = signatures$Top.80.)
+
+read.delim("/home/katiej/methylcibersort_test/MB.vsd.txt", row.names = 1) -> MB.vsd
+
+### convert your rownames to gene names
+ensembl_IDs <- rownames(MB.vsd) 
+## remove the suffix
+gsub('\\..*$', '', ensembl_IDs) -> ensembl_IDs
+
+mart <- useMart(biomart = 'ensembl', dataset = 'hsapiens_gene_ensembl') 
+
+symbols <- getBM(attributes = c('ensembl_gene_id',  'hgnc_symbol'),
+                     filters = 'ensembl_gene_id', 
+                     ensembl_IDs, mart = mart) 
+
+annotatedix  <- match(ensembl_IDs, symbols$ensembl_gene_id) 
+symbols[annotatedix,]  ->  annotatedGenes 
+MB.vsd$hgnc_symbol <- annotatedGenes$hgnc_symbol 
+
+#Remove duplicated rows using: 
+MB.vsd <- MB.vsd[!duplicated(MB.vsd $hgnc_symbol),]  
+
+#Remove transcripts with no gene annotation using: 
+MB.vsd <- na.omit(MB.vsd) 
+
+#Set gene IDs as rownames and remove column: 
+rownames(MB.vsd) <- MB.vsd$hgnc_symbol 
+
+MB.vsd$hgnc_symbol <- NULL 
+
+signatures.list <- as.list(signatures)
+
+gsva.gsva <- as.data.frame(t(GSVA::gsva(as.matrix(MB.vsd), signatures.list, verbose=FALSE, method = ("gsva"))))
+gsva.ssgea <- as.data.frame(t(GSVA::gsva(as.matrix(MB.vsd), signatures.list, verbose=FALSE, method = ("ssgsea"))))
+gsva.zscore <- as.data.frame(t(GSVA::gsva(as.matrix(MB.vsd), signatures.list, verbose=FALSE, method = ("zscore"))))
+gsva.plage <- as.data.frame(t(GSVA::gsva(as.matrix(MB.vsd), signatures.list, verbose=FALSE, method = ("plage"))))
+dim(gsva.gsva)
+dim(gsva.ssgea)
+dim(gsva.zscore)
+dim(gsva.plage)
+
+gsva(MB_vsd, signatures.list[[1]], annotation,
+     method=c("gsva"),
+     kcdf=c("Gaussian"),
+     abs.ranking=FALSE,
+     min.sz=1,
+     max.sz=Inf,
+     parallel.sz=1L,
+     mx.diff=TRUE,
+     tau=switch(method, gsva=1, ssgsea=0.25, NA),
+     ssgsea.norm=TRUE,
+     verbose=TRUE,
+     BPPARAM=SerialParam(progressbar=verbose))
+
+
+##### test data
+
+p <- 10000 ## number of genes
+n <- 30    ## number of samples
+## simulate expression values from a standard Gaussian distribution
+X <- matrix(rnorm(p*n), nrow=p,
+            dimnames=list(paste0("g", 1:p), paste0("s", 1:n)))
+
+## sample gene set sizes
+gs <- as.list(sample(10:100, size=100, replace=TRUE))
+## sample gene sets
+gs <- lapply(gs, function(n, p)
+  paste0("g", sample(1:p, size=n, replace=FALSE)), p)
+names(gs) <- paste0("gs", 1:length(gs))
+
+gsva.es <- gsva(X, gs, verbose=FALSE)
+dim(gsva.es)
+
+gsva.es[1:5, 1:5]
+
+## corrplot
+
+library(corrplot)
+
+gsva.cor <- cor(gsva.gsva)
+corrplot(gsva.cor, method = 'number')
+ssgea.cor <- cor(gsva.ssgea)
+corrplot(ssgea.cor, method = 'number')
+zscore.cor <- cor(gsva.zscore)
+corrplot(zscore.cor, method = 'number')
+plage.cor <- cor(gsva.cor)
+corrplot(plage.cor, method = 'number')
+
+gvsa.scatter.sen.age <- plot(gsva.gsva$senMayo, gsva.gsva$cellAge)
+gvsa.scatter.sen.20 <- plot(gsva.gsva$senMayo, gsva.gsva$top20)
+gvsa.scatter.sen.80 <- plot(gsva.gsva$senMayo, gsva.gsva$top80)
+gvsa.scatter.age.20 <- plot(gsva.gsva$cellAge, gsva.gsva$top20)
+gvsa.scatter.age.80 <- plot(gsva.gsva$cellAge, gsva.gsva$top80)
+gvsa.scatter.20.80 <- plot(gsva.gsva$top20, gsva.gsva$top80)
+
+library(ggplot2)
+
+ggplot(gsva.gsva, aes(x=senMayo, y=cellAge)) + geom_point()
+ggplot(gsva.gsva, aes(x=senMayo, y=top20)) + geom_point()
+ggplot(gsva.gsva, aes(x=senMayo, y=top80)) + geom_point()
+ggplot(gsva.gsva, aes(x=cellAge, y=top20)) + geom_point()
+ggplot(gsva.gsva, aes(x=cellAge, y=top80)) + geom_point()
+ggplot(gsva.gsva, aes(x=top20, y=top80)) + geom_point()
+
+png(gvsa.scatter.sen.age, gvsa.scatter.sen.20, gvsa.scatter.sen.80, gvsa.scatter.age.20, gvsa.scatter.age.80, gvsa.scatter.20.80)
+
+ssgea.cor <- cor(gsva.ssgea) 
