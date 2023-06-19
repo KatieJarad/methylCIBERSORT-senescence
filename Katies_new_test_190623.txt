@@ -1,0 +1,456 @@
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+ 
+BiocManager::install("GSVA")
+BiocManager::install("GSVAdata")
+BiocManager::install("GSVABase")
+BiocManager::install("escape")
+BiocManager::install("dittoSeq")
+BiocManager::install("biomaRt")
+BiocManager::install("preprocessCore")
+
+library(Biobase)
+library(data.table)
+library(readr)
+library(GSEABase)
+library(GSVAdata)
+library(GSVA)
+library(biomaRt) 
+library(ggplot2)
+library(ggpubr)
+library(gridExtra)
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(escape)
+library(dittoSeq)
+library(SingleCellExperiment)
+library(SeuratObject)
+library(utils)
+library(corrplot)
+
+## reading in the signatures file
+signatures <- read.csv("/home/katiej/methylcibersort_test/signatures.csv")
+signatures.list <- list(senMayo = signatures$SenMayo,
+     cellAge = signatures$CellAge,
+     top20 = signatures$Top.20,
+     top80 = signatures$Top.80)
+
+read.delim("/home/katiej/methylcibersort_test/MB.vsd.txt", row.names = 1) -> MB.vsd
+
+### convert your rownames to gene names
+ensembl_IDs <- rownames(MB.vsd) 
+## remove the suffix
+gsub('\\..*$', '', ensembl_IDs) -> ensembl_IDs
+
+mart <- useMart(biomart = 'ensembl', dataset = 'hsapiens_gene_ensembl') 
+
+symbols <- getBM(attributes = c('ensembl_gene_id',  'hgnc_symbol'),
+                     filters = 'ensembl_gene_id', 
+                     ensembl_IDs, mart = mart) 
+
+annotatedix  <- match(ensembl_IDs, symbols$ensembl_gene_id) 
+symbols[annotatedix,]  ->  annotatedGenes 
+MB.vsd$hgnc_symbol <- annotatedGenes$hgnc_symbol 
+
+#Remove duplicated rows using: 
+MB.vsd <- MB.vsd[!duplicated(MB.vsd $hgnc_symbol),]  
+
+#Remove transcripts with no gene annotation using: 
+MB.vsd <- na.omit(MB.vsd) 
+
+#Set gene IDs as rownames and remove column: 
+rownames(MB.vsd) <- MB.vsd$hgnc_symbol 
+
+MB.vsd$hgnc_symbol <- NULL 
+
+signatures.list <- as.list(signatures)
+
+gsva.gsva <- as.data.frame(t(GSVA::gsva(as.matrix(MB.vsd), signatures.list, verbose=FALSE, method = ("gsva"))))
+gsva.ssgsea <- as.data.frame(t(GSVA::gsva(as.matrix(MB.vsd), signatures.list, verbose=FALSE, method = ("ssgsea"))))
+gsva.zscore <- as.data.frame(t(GSVA::gsva(as.matrix(MB.vsd), signatures.list, verbose=FALSE, method = ("zscore"))))
+gsva.plage <- as.data.frame(t(GSVA::gsva(as.matrix(MB.vsd), signatures.list, verbose=FALSE, method = ("plage"))))
+
+
+##### test data
+
+p <- 10000 ## number of genes
+n <- 30    ## number of samples
+## simulate expression values from a standard Gaussian distribution
+X <- matrix(rnorm(p*n), nrow=p,
+            dimnames=list(paste0("g", 1:p), paste0("s", 1:n)))
+
+## sample gene set sizes
+gs <- as.list(sample(10:100, size=100, replace=TRUE))
+## sample gene sets
+gs <- lapply(gs, function(n, p)
+  paste0("g", sample(1:p, size=n, replace=FALSE)), p)
+names(gs) <- paste0("gs", 1:length(gs))
+
+gsva.es <- gsva(X, gs, verbose=FALSE)
+dim(gsva.es)
+
+gsva.es[1:5, 1:5]
+
+## corrplot
+
+gsva.cor <- cor(gsva.gsva)
+corrplot.mixed(gsva.cor, lower = "number", upper = "circle")
+ssgsea.cor <- cor(gsva.ssgsea)
+corrplot.mixed(ssgsea.cor, lower = "number", upper = "circle")
+zscore.cor <- cor(gsva.zscore)
+corrplot.mixed(zscore.cor, lower = "number", upper = "circle")
+plage.cor <- cor(gsva.cor)
+corrplot.mixed(plage.cor, lower = "number", upper = "circle")
+
+## ggplot scatter plots comparing methods
+
+gsva.ggscatter.sen.age <- ggplot(gsva.gsva, aes(x=SenMayo, y=CellAge)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo vs CellAge senescence signatures sorted using GSVA") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(gsva.ggscatter.sen.age, file = "./gsva.ggscatter.sen.age.png", width =  20, height = 10, units = "cm")
+gsva.ggscatter.sen.20 <- ggplot(gsva.gsva, aes(x=SenMayo, y=Top.20)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo vs Top 20 senescence signatures sorted using GSVA") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(gsva.ggscatter.sen.20, file = "./gsva.ggscatter.sen.20.png", width =  20, height = 10, units = "cm")
+gsva.ggscatter.sen.80 <- ggplot(gsva.gsva, aes(x=SenMayo, y=Top.80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo vs Top 80 senescence signatures sorted using GSVA") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(gsva.ggscatter.sen.80, file = "./gsva.ggscatter.sen.80.png", width =  20, height = 10, units = "cm")
+gsva.ggscatter.age.20 <- ggplot(gsva.gsva, aes(x=CellAge, y=Top.20)) + geom_point() + geom_smooth(method=lm) +
+  stat_cor(method="pearson") + ggtitle("CellAge vs Top 20 senescence signatures sorted using GSVA") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(gsva.ggscatter.age.20, file = "./gsva.ggscatter.age.20.png", width =  20, height = 10, units = "cm")
+gsva.ggscatter.age.80 <- ggplot(gsva.gsva, aes(x=CellAge, y=Top.80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("CellAge vs Top 80 senescence signatures sorted using GSVA") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(gsva.ggscatter.age.80, file = "./gsva.ggscatter.age.80.png", width =  20, height = 10, units = "cm")
+gsva.ggscatter.20.80 <- ggplot(gsva.gsva, aes(x=Top.20, y=Top.80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("Top 20 vs Top 80 senescence signatures sorted using GSVA") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(gsva.ggscatter.20.80, file = "./gsva.ggscatter.20.80.png", width =  20, height = 10, units = "cm")
+
+a <- ggarrange(gsva.ggscatter.sen.age, gsva.ggscatter.sen.20, gsva.ggscatter.sen.80, gsva.ggscatter.age.20, 
+               gsva.ggscatter.age.80, gsva.ggscatter.20.80, width = 20, height = 10)
+  
+ssgsea.ggscatter.sen.age <- ggplot(gsva.ssgsea, aes(x=SenMayo, y=CellAge)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo vs CellAge senescence signatures sorted using ssGSEA") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(ssgsea.ggscatter.sen.age, file = "./ssgsea.ggscatter.sen.age.png", width =  20, height = 10, units = "cm")
+ssgsea.ggscatter.sen.20 <- ggplot(gsva.ssgsea, aes(x=SenMayo, y=Top.20)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo vs Top 20 senescence signatures sorted using ssGSEA") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(ssgsea.ggscatter.sen.20, file = "./ssgsea.ggscatter.sen.20.png", width =  20, height = 10, units = "cm")
+ssgsea.ggscatter.sen.80 <- ggplot(gsva.ssgsea, aes(x=SenMayo, y=Top.80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("CellAge vs Top 80 senescence signatures sorted using ssGSEA") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(ssgsea.ggscatter.sen.80, file = "./ssgsea.ggscatter.sen.80.png", width =  20, height = 10, units = "cm")
+ssgsea.ggscatter.age.20 <- ggplot(gsva.ssgsea, aes(x=CellAge, y=Top.20)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("CellAge vs Top 20 senescence signatures sorted using ssGSEA") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(ssgsea.ggscatter.age.20, file = "./ssgsea.ggscatter.age.20.png", width =  20, height = 10, units = "cm")
+ssgsea.ggscatter.age.80 <- ggplot(gsva.ssgsea, aes(x=CellAge, y=Top.80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("CellAge vs Top 80 senescence signatures sorted using ssGSEA") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(ssgsea.ggscatter.age.80, file = "./ssgsea.ggscatter.age.80.png", width =  20, height = 10, units = "cm")
+ssgsea.ggscatter.20.80 <- ggplot(gsva.ssgsea, aes(x=Top.20, y=Top.80)) + geom_point() + geom_smooth(method=lm) +
+  stat_cor(method="pearson") + ggtitle("Top 20 vs Top 80 senescence signatures sorted using ssGSEA") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(ssgsea.ggscatter.20.80, file = "./ssgsea.ggscatter.20.80.png", width =  20, height = 10, units = "cm")
+
+b <- ggarrange(ssgsea.ggscatter.sen.age, ssgsea.ggscatter.sen.20, ssgsea.ggscatter.sen.80, ssgsea.ggscatter.age.20, 
+               ssgsea.ggscatter.age.80, ssgsea.ggscatter.20.80, width = 20, height = 10)
+  
+zscore.ggscatter.sen.age <- ggplot(gsva.zscore, aes(x=SenMayo, y=CellAge)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo vs CellAge senescence signatures sorted using zscore") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(zscore.ggscatter.sen.age, file = "./zscore.ggscatter.sen.age.png", width =  20, height = 10, units = "cm")
+zscore.ggscatter.sen.20 <- ggplot(gsva.zscore, aes(x=SenMayo, y=Top.20)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo vs Top 20 senescence signatures sorted using zscore") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(zscore.ggscatter.sen.20, file = "./zscore.ggscatter.sen.20.png", width =  20, height = 10, units = "cm")
+zscore.ggscatter.sen.80 <- ggplot(gsva.zscore, aes(x=SenMayo, y=Top.80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo vs Top 80 senescence signatures sorted using zscore") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(zscore.ggscatter.sen.80, file = "./zscore.ggscatter.sen.80.png", width =  20, height = 10, units = "cm")
+zscore.ggscatter.age.20 <- ggplot(gsva.zscore, aes(x=CellAge, y=Top.20)) + geom_point() + geom_smooth(method=lm) + 
+  ggtitle("CellAge vs Top 20 senescence signatures sorted using zscore") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(zscore.ggscatter.age.20, file = "./zscore.ggscatter.age.20.png", width =  20, height = 10, units = "cm")
+zscore.ggscatter.age.80 <- ggplot(gsva.zscore, aes(x=CellAge, y=Top.80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("CellAge vs Top 80 senescence signatures sorted using zscore") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(zscore.ggscatter.age.80, file = "./zscore.ggscatter.age.80.png", width =  20, height = 10, units = "cm")
+zscore.ggscatter.20.80 <- ggplot(gsva.zscore, aes(x=Top.20, y=Top.80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("Top 20 vs Top 80 senescence signatures sorted using zscore") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(zscore.ggscatter.20.80, file = "./zscore.ggscatter.20.80.png", width =  20, height = 10, units = "cm")
+
+c <- ggarrange(zscore.ggscatter.sen.age, zscore.ggscatter.sen.20, zscore.ggscatter.sen.80, zscore.ggscatter.age.20, 
+               zscore.ggscatter.age.80, zscore.ggscatter.20.80, width = 20, height = 10)
+  
+plage.ggscatter.sen.age <- ggplot(gsva.plage, aes(x=SenMayo, y=CellAge)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo vs CellAge senescence signatures sorted using Plage") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(plage.ggscatter.sen.age, file = "./plage.ggscatter.sen.age.png", width =  20, height = 10, units = "cm")
+plage.ggscatter.sen.20 <- ggplot(gsva.plage, aes(x=SenMayo, y=Top.20)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo vs Top 20 senescence signatures sorted using Plage") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(plage.ggscatter.sen.20, file = "./plage.ggscatter.sen.20.png", width =  20, height = 10, units = "cm")
+plage.ggscatter.sen.80 <- ggplot(gsva.plage, aes(x=SenMayo, y=Top.80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo vs Top 80 senescence signatures sorted using Plage") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(plage.ggscatter.sen.80, file = "./plage.ggscatter.sen.80.png", width =  20, height = 10, units = "cm")
+plage.ggscatter.age.20 <- ggplot(gsva.plage, aes(x=CellAge, y=Top.20)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("CellAge vs Top 20 senescence signatures sorted using Plage") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(plage.ggscatter.age.20, file = "./plage.ggscatter.age.20.png", width =  20, height = 10, units = "cm")
+plage.ggscatter.age.80 <- ggplot(gsva.plage, aes(x=CellAge, y=Top.80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("CellAge vs Top 80 senescence signatures sorted using Plage") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(plage.ggscatter.age.80, file = "./plage.ggscatter.age.80.png", width =  20, height = 10, units = "cm")
+plage.ggscatter.20.80 <- ggplot(gsva.plage, aes(x=Top.20, y=Top.80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("Top 20 vs Top 80 senescence signatures sorted using Plage") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+  ggsave(plage.ggscatter.20.80, file = "./plage.ggscatter.20.80.png", width =  20, height = 10, units = "cm")
+
+d <- ggarrange(plage.ggscatter.sen.age, plage.ggscatter.sen.20, plage.ggscatter.sen.80, plage.ggscatter.age.20, 
+               plage.ggscatter.age.80, plage.ggscatter.20.80, width = 20, height = 10)
+
+############
+
+senMayo.gsva <- data.frame(gsva.senmayo = gsva.gsva$SenMayo,
+                           ssgsea.senmayo = gsva.ssgsea$SenMayo,
+                           zscore.senmayo = gsva.zscore$SenMayo,
+                           plage.senmayo = gsva.plage$SenMayo)
+
+cellAge.gsva <- data.frame(gsva.cellage = gsva.gsva$CellAge,
+                           ssgsea.cellage = gsva.ssgsea$CellAge,
+                           zscore.cellage = gsva.zscore$CellAge,
+                           plage.cellage = gsva.plage$CellAge)
+
+top20.gsva <- data.frame(gsva.top20 = gsva.gsva$Top.20,
+                       ssgsea.top20 = gsva.ssgsea$Top.20,
+                       zscore.top20 = gsva.zscore$Top.20,
+                       plage.top20 = gsva.plage$Top.20)
+
+top80.gsva <- data.frame(gsva.top80 = gsva.gsva$Top.80,
+                         ssgsea.top80 = gsva.ssgsea$Top.80,
+                         zscore.top80 = gsva.zscore$Top.80,
+                         plage.top80 = gsva.plage$Top.80)
+
+## ggplot scatter plots for comparing signatures
+
+senMayo.gsva.ssgsea <- ggplot(senMayo.gsva, aes(x=gsva.senmayo, y=ssgsea.senmayo)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo signature compared over GSVA and ssGSEA methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(senMayo.gsva.ssgsea, file = "./senMayo.gsva.ssgsea.png", width =  20, height = 10, units = "cm")
+senMayo.gsva.zscore <- ggplot(senMayo.gsva, aes(x=gsva.senmayo, y=zscore.senmayo)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo signature compared over GSVA and zScore methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(senMayo.gsva.zscore, file = "./senMayo.gsva.zscore.png", width =  20, height = 10, units = "cm")
+senMayo.gsva.plage <- ggplot(senMayo.gsva, aes(x=gsva.senmayo, y=plage.senmayo)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo signature compared over GSVA and Plage methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(senMayo.gsva.plage, file = "./senMayo.gsva.plage.png", width =  20, height = 10, units = "cm")
+senMayo.ssgsea.zscore <- ggplot(senMayo.gsva, aes(x=ssgsea.senmayo, y=zscore.senmayo)) +geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo signature compared over ssGSEA and zScore methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(senMayo.ssgsea.zscore, file = "./senMayo.ssgsea.zscore.png", width =  20, height = 10, units = "cm")
+senMayo.ssgsea.plage <- ggplot(senMayo.gsva, aes(x=ssgsea.senmayo, y=plage.senmayo)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo signature compared over ssGSEA and Plage methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(senMayo.ssgsea.plage, file = "./senMayo.ssgsea.plage.png", width =  20, height = 10, units = "cm")
+senMayo.zscore.plage <- ggplot(senMayo.gsva, aes(x=zscore.senmayo, y=plage.senmayo)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("SenMayo signature compared over ssGSEA and Plage methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(senMayo.zscore.plage, file = "./senMayo.zscore.plage.png", width =  20, height = 10, units = "cm")
+
+e <- ggarrange(senMayo.gsva.ssgsea, senMayo.gsva.zscore, senMayo.gsva.plage, senMayo.ssgsea.zscore, 
+               senMayo.ssgsea.plage, senMayo.zscore.plage, width = 20, height = 10)
+
+cellAge.gsva.ssgsea <- ggplot(cellAge.gsva, aes(x=gsva.cellage, y=ssgsea.cellage)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("CellAge signature compared over GSVA and ssGSEA methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(cellAge.gsva.ssgsea, file = "./cellAge.gsva.ssgsea.png", width =  20, height = 10, units = "cm")
+cellAge.gsva.zscore <- ggplot(cellAge.gsva, aes(x=gsva.cellage, y=zscore.cellage)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("CellAge signature compared over GSVA and zScore methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(cellAge.gsva.zscore, file = "./cellAge.gsva.zscore.png", width =  20, height = 10, units = "cm")
+cellAge.gsva.plage <- ggplot(cellAge.gsva, aes(x=gsva.cellage, y=plage.cellage)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("CellAge signature compared over GSVA and Plage methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(cellAge.gsva.plage, file = "./cellAge.gsva.plage.png", width =  20, height = 10, units = "cm")
+cellAge.ssgsea.zscore <- ggplot(cellAge.gsva, aes(x=ssgsea.cellage, y=zscore.cellage)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("CellAge signature compared over ssGSEA and zScore methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(senMayo.ssgsea.zscore, file = "./cellAge.ssgsea.zscore.png", width =  20, height = 10, units = "cm")
+cellAge.ssgsea.plage <- ggplot(cellAge.gsva, aes(x=ssgsea.cellage, y=plage.cellage)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("CellAge signature compared over ssGSEA and Plage methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(cellAge.ssgsea.plage, file = "./cellAge.ssgsea.plage.png", width =  20, height = 10, units = "cm")
+cellAge.zscore.plage <- ggplot(cellAge.gsva, aes(x=zscore.cellage, y=plage.cellage)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("CellAge signature compared over ssGSEA and Plage methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(cellAge.zscore.plage, file = "./cellAge.zscore.plage.png", width =  20, height = 10, units = "cm")
+
+f <- ggarrange(cellAge.gsva.ssgsea, cellAge.gsva.zscore, cellAge.gsva.plage, cellAge.ssgsea.zscore,
+               cellAge.ssgsea.plage, cellAge.zscore.plage, width = 20, height = 10)
+
+top20.gsva.ssgsea <- ggplot(top20.gsva, aes(x=gsva.top20, y=ssgsea.top20)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("Top 20 genes compared over GSVA and ssGSEA methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(top20.gsva.ssgsea, file = "./top20.gsva.ssgsea.png", width =  20, height = 10, units = "cm")
+top20.gsva.zscore <- ggplot(top20.gsva, aes(x=gsva.top20, y=zscore.top20)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("Top 20 genes compared over GSVA and zScore methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(top20.gsva.zscore, file = "./top20.gsva.zscore.png", width =  20, height = 10, units = "cm")
+top20.gsva.plage <- ggplot(top20.gsva, aes(x=gsva.top20, y=plage.top20)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("Top 20 genes compared over GSVA and Plage methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(top20.gsva.plage, file = "./top20.gsva.plage.png", width =  20, height = 10, units = "cm")
+top20.ssgsea.zscore <- ggplot(top20.gsva, aes(x=ssgsea.top20, y=zscore.top20)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("Top 20 genes compared over ssGSEA and zScore methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(top20.ssgsea.zscore, file = "./top20.ssgsea.zscore.png", width =  20, height = 10, units = "cm")
+top20.ssgsea.plage <- ggplot(top20.gsva, aes(x=ssgsea.top20, y=plage.top20)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("Top 20 genes compared over ssGSEA and Plage methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(top20.ssgsea.plage, file = "./top20.ssgsea.plage.png", width =  20, height = 10, units = "cm")
+top20.zscore.plage <- ggplot(top20.gsva, aes(x=zscore.top20, y=plage.top20)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("Top 20 genes compared over ssGSEA and Plage methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(top20.zscore.plage, file = "./top20.zscore.plage.png", width =  20, height = 10, units = "cm")
+
+g <- ggarrange(top20.gsva.ssgsea, top20.gsva.zscore, top20.gsva.plage, top20.ssgsea.zscore,
+               top20.ssgsea.plage, top20.zscore.plage, width = 20, height = 10)
+
+top80.gsva.ssgsea <- ggplot(top80.gsva, aes(x=gsva.top80, y=ssgsea.top80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("Top 80 genes compared over GSVA and ssGSEA methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(top80.gsva.ssgsea, file = "./top80.gsva.ssgsea.png", width =  20, height = 10, units = "cm")
+top80.gsva.zscore <- ggplot(top80.gsva, aes(x=gsva.top80, y=zscore.top80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("Top 80 genes compared over GSVA and zScore methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(top80.gsva.zscore, file = "./top80.gsva.zscore.png", width =  20, height = 10, units = "cm")
+top80.gsva.plage <- ggplot(top80.gsva, aes(x=gsva.top80, y=plage.top80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("Top 80 genes compared over GSVA and Plage methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(top80.gsva.plage, file = "./top80.gsva.plage.png", width =  20, height = 10, units = "cm")
+top80.ssgsea.zscore <- ggplot(top80.gsva, aes(x=ssgsea.top80, y=zscore.top80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("Top 80 genes compared over ssGSEA and zScore methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(top80.ssgsea.zscore, file = "./top80.ssgsea.zscore.png", width =  20, height = 10, units = "cm")
+top80.ssgsea.plage <- ggplot(top80.gsva, aes(x=ssgsea.top80, y=plage.top80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("Top 80 genes compared over ssGSEA and Plage methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(top80.ssgsea.plage, file = "./top80.ssgsea.plage.png", width =  20, height = 10, units = "cm")
+top80.zscore.plage <- ggplot(top80.gsva, aes(x=zscore.top80, y=plage.top80)) + geom_point() + geom_smooth(method=lm) + 
+  stat_cor(method="pearson") + ggtitle("Top 80 genes compared over ssGSEA and Plage methods") +
+  theme(plot.title = element_text(size=10, hjust = 0.5))
+ggsave(top80.zscore.plage, file = "./top80.zscore.plage.png", width =  20, height = 10, units = "cm")
+
+h <- ggarrange(top80.gsva.ssgsea, top80.gsva.zscore, top80.gsva.plage, top80.ssgsea.zscore, 
+               top80.ssgsea.plage, top80.zscore.plage, width = 20, height = 10)
+
+senMayo.gsva.cor <- cor(senMayo.gsva)
+corrplot.mixed(senMayo.gsva.cor, lower = "number", upper = "circle")
+cellAge.gsva.cor <- cor(cellAge.gsva)
+corrplot.mixed(cellAge.gsva.cor, lower = "number", upper = "circle")
+top20.gsva.cor <- cor(top20.gsva)
+corrplot.mixed(top20.gsva.cor, lower = "number", upper = "circle")
+top80.gsva.cor <- cor(top80.gsva)
+corrplot.mixed(top80.gsva.cor, lower = "number", upper = "circle")
+
+###############
+
+data <- read.table(file = "/home/katiej/methylcibersort_test/rstudio-export-2/OPT2_0.2_200_Signature.txt")
+
+# this is the signature file
+sig.yg.opt2.b.sig <- read.delim("/home/katiej/methylcibersort_test/OPT2_0.2_200_Signature.txt", row.names = 1, header = TRUE)
+
+# this is the mixture file
+mix.pan.opt2.b.sig <- read.table("/home/katiej/methylcibersort_test/mb_mixture.opt2.b.sig.txt", row.names = 1, header = TRUE)
+
+# this is the phenotype data for each of the samples
+beta.mb.pheno <- read.csv("/home/katiej/methylcibersort_test/beta.mb.combined.pheno.data.2.csv", row.names = 1, header = TRUE)
+
+### create a family column within pan.pheno
+library(dplyr)
+
+a <- Sys.time()
+source("/home/katiej/methylcibersort_test/CIBERSORT.R") 
+results.meth <- CIBERSORT(sig_matrix = "/home/katiej/methylcibersort_test/OPT2_0.2_200_Signature.txt",
+                       mixture_file = "/home/katiej/methylcibersort_test/mb_mixture.opt2.b.sig.txt",
+                       perm = 1000,
+                       QN = FALSE,
+                       absolute = FALSE,
+                       abs_method = 'sig.score')
+b <- Sys.time()
+b-a
+saveRDS(results.meth, "./results.meth.rds")
+
+match(beta.mb.pheno$Sample_Name, rownames(exp.df.results))
+combined.df.meth <- data.frame(beta.mb.pheno, results.meth)
+
+write.csv(combined.df.meth, "combined.df.meth.csv")
+
+## escape ssGSEA analysis
+
+suppressPackageStartupMessages(library(escape))
+suppressPackageStartupMessages(library(dittoSeq))
+suppressPackageStartupMessages(library(SingleCellExperiment))
+suppressPackageStartupMessages(library(Seurat))
+suppressPackageStartupMessages(library(SeuratObject))
+
+pbmc_small <- get("pbmc_small")
+pbmc_small <- DietSeurat(suppressMessages(UpdateSeuratObject(pbmc_small)))
+sce <- as.SingleCellExperiment(pbmc_small, assay = "RNA")
+
+GS.hallmark <- getGeneSets(library ="H")
+data("escape.gene.sets", package="escape")
+gene.sets <- escape.gene.sets
+
+pbmc.ES.Seurat <- enrichIt(obj = pbmc_small, 
+                        gene.sets = GS.hallmark, 
+                        groups = 1000, cores = 2, 
+                        min.size = 5)
+
+pbmc_small <- Seurat::AddMetaData(pbmc_small, pbmc.ES.Seurat)
+
+dittoHeatmap(pbmc_small, genes = NULL, metas = names(pbmc.ES.Seurat), 
+             annot.by = "groups", 
+             fontsize = 7, 
+             cluster_cols = TRUE,
+             heatmap.colors = colors(50))
+
+## my Seurat object
+
+my.gene.sets <- list(Sakaki, SenMayo, CellAge, Avelar, Basisty, Casella, Chatsirisupachai, PengIMR90, PengCDKN1A, Purcell, Coppe)
+
+names(my.gene.sets) <- c("Sakaki", "SenMayo", "CellAge",
+                         "Avelar", "Basisty", "Casella", 
+                         "Chatsirisupachai", "PengIMR90", 
+                         "PengCDKN1A", "Purcell", "Coppe")
+
+mbs <- readRDS(file = '/home/cancer/rna_seq_mb/single_cell_hovestadt.rds')
+
+merge(mbs[[1]],mbs[(1:length(mbs))[-1]],add.cell.ids = names(mbs),
+      project = "all_medullo") -> mbs
+
+ES.seurat <- enrichIt(obj = mbs,
+                      gene.sets = my.gene.sets,
+                      groups = 1000, cores = 10,
+                      min.size = 5)
+mbs <- Seurat::AddMetaData(mbs, ES.seurat)
+
+VlnPlot(mbs, features = "X1", group.by = "subgroup")
+
+
+colors <- colorRampPalette(c("#0D0887FF","#7E03A8FF","#CC4678FF","#F89441FF","#F0F921FF"))
+
+dittoHeatmap(mbs, genes = NULL, metas = names(ES.seurat),
+             annot.by = "sample_type",
+             fontsize = 7,
+             cluster_cols = TRUE,
+             heatmap.colors = colors(50))
